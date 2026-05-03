@@ -2,6 +2,11 @@
 
 A high-performance, real-time web application allowing users to interact with a grid of 1 million checkboxes simultaneously. Built with a focus on scalability, memory efficiency, and robust security.
 
+## Demo
+
+- **YouTube Link**: [demo video link](https://youtu.be/6YJSEmK90TQ)
+- **Includes**: Real-time sync demo, Auth flow, Rate limiting trigger, and 1M scroll performance.
+
 ## Key Features & Architectural Decisions
 
 This project is designed to handle **scale** and **concurrency** by leveraging industry-standard patterns:
@@ -82,8 +87,3 @@ git clone https://github.com/atharvdange618/one-mil-checkboxes
 5. **Access the App**: Open `http://localhost:8000`.
 
 ---
-
-## Demo
-
-- **YouTube Link**: yet to come bois
-- **Includes**: Real-time sync demo, Auth flow, Rate limiting trigger, and 1M scroll performance.
