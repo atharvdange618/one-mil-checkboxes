@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>1 Million Checkboxes</title>
+    <style>
+      :root {
+        --bg-color: #0f172a;
+        --text-color: #f8fafc;
+        --accent-color: #38bdf8;
+        --checkbox-size: 20px;
+        --gap: 4px;
+        --cell-size: calc(var(--checkbox-size) + var(--gap));
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        line-height: 1.5;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      header {
+        padding: 1rem 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(15, 23, 42, 0.9);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        z-index: 100;
+      }
+
+      h1 {
+        font-size: 1.5rem;
+        font-weight: 800;
+        background: linear-gradient(to right, #38bdf8, #818cf8);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      #user-info {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      .btn {
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s;
+      }
+
+      .btn-primary {
+        background-color: var(--accent-color);
+        color: #0f172a;
+        border: none;
+      }
+
+      .btn-outline {
+        background: transparent;
+        border: 1px solid var(--accent-color);
+        color: var(--accent-color);
+      }
+
+      #viewport {
+        flex: 1;
+        overflow: auto;
+        position: relative;
+        padding: 1.5rem;
+      }
+
+      #scroll-spacer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+      }
+
+      #grid {
+        position: absolute;
+        top: 0;
+        left: 0;
+        display: grid;
+        /* Grid columns will be set via JS */
+      }
+
+      .checkbox-wrapper {
+        position: absolute;
+        width: var(--checkbox-size);
+        height: var(--checkbox-size);
+      }
+
+      input[type="checkbox"] {
+        appearance: none;
+        width: 100%;
+        height: 100%;
+        background-color: #1e293b;
+        border: 2px solid #334155;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.1s;
+      }
+
+      input[type="checkbox"]:checked {
+        background-color: var(--accent-color);
+        border-color: var(--accent-color);
+      }
+
+      input[type="checkbox"]:hover {
+        border-color: var(--accent-color);
+        transform: scale(1.1);
+      }
+
+      #toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: #ef4444;
+        color: white;
+        border-radius: 8px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        display: none;
+        z-index: 1000;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>1 Million Checkboxes</h1>
+      <div id="user-info">
+        <span id="username">Guest</span>
+        <a href="/login" id="login-btn" class="btn btn-primary"
+          >Login to Toggle</a
+        >
+        <a
+          href="/logout"
+          id="logout-btn"
+          class="btn btn-outline"
+          style="display: none"
+          >Logout</a
+        >
+      </div>
+    </header>
+
+    <div id="viewport">
+      <div id="scroll-spacer"></div>
+      <div id="grid"></div>
+    </div>
+
+    <div id="toast"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      const viewport = document.getElementById("viewport");
+      const scrollSpacer = document.getElementById("scroll-spacer");
+      const grid = document.getElementById("grid");
+      const toast = document.getElementById("toast");
+
+      const TOTAL_CHECKBOXES = 1000000;
+      const CHECKBOX_SIZE = 20;
+      const GAP = 4;
+      const CELL_SIZE = CHECKBOX_SIZE + GAP;
+
+      let columns = 0;
+      let rows = 0;
+      let visibleRange = { start: 0, end: 0 };
+      const checkboxStates = new Map();
+
+      function updateGridDimensions() {
+        const width = viewport.clientWidth - 48;
+        columns = Math.floor(width / CELL_SIZE);
+        rows = Math.ceil(TOTAL_CHECKBOXES / columns);
+
+        scrollSpacer.style.height = `${rows * CELL_SIZE}px`;
+        scrollSpacer.style.width = `${columns * CELL_SIZE}px`;
+        render();
+      }
+
+      function render() {
+        const scrollTop = viewport.scrollTop;
+        const viewportHeight = viewport.clientHeight;
+
+        const startRow = Math.floor(scrollTop / CELL_SIZE);
+        const endRow = Math.ceil((scrollTop + viewportHeight) / CELL_SIZE);
+
+        const start = Math.max(0, startRow * columns);
+        const end = Math.min(TOTAL_CHECKBOXES - 1, (endRow + 1) * columns);
+
+        if (start === visibleRange.start && end === visibleRange.end) return;
+
+        visibleRange = { start, end };
+
+        socket.emit("client:request:range", { start, end });
+
+        updateDOM();
+      }
+
+      function updateDOM() {
+        grid.innerHTML = "";
+        for (let i = visibleRange.start; i <= visibleRange.end; i++) {
+          const row = Math.floor(i / columns);
+          const col = i % columns;
+
+          const el = document.createElement("div");
+          el.className = "checkbox-wrapper";
+          el.style.top = `${row * CELL_SIZE}px`;
+          el.style.left = `${col * CELL_SIZE}px`;
+
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.dataset.index = i;
+          cb.checked = checkboxStates.get(i) || false;
+
+          cb.addEventListener("change", (e) => {
+            socket.emit("client:checkbox:change", {
+              index: i,
+              checked: e.target.checked,
+            });
+            checkboxStates.set(i, e.target.checked);
+          });
+
+          el.appendChild(cb);
+          grid.appendChild(el);
+        }
+      }
+
+      function showToast(msg) {
+        toast.innerText = msg;
+        toast.style.display = "block";
+        setTimeout(() => {
+          toast.style.display = "none";
+        }, 3000);
+      }
+
+      socket.on("server:response:range", (data) => {
+        const { start, states } = data;
+        states.forEach((state, offset) => {
+          checkboxStates.set(start + offset, !!state);
+        });
+        document.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+          const idx = parseInt(cb.dataset.index);
+          if (checkboxStates.has(idx)) {
+            cb.checked = checkboxStates.get(idx);
+          }
+        });
+      });
+
+      socket.on("server:checkbox:change", (data) => {
+        const { index, checked } = data;
+        checkboxStates.set(index, checked);
+        const cb = document.querySelector(`input[data-index="${index}"]`);
+        if (cb) cb.checked = checked;
+      });
+
+      socket.on("server:error", (data) => {
+        showToast(data.message);
+      });
+
+      fetch("/me")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.user) {
+            document.getElementById("username").innerText =
+              data.user.email || data.user.sub;
+            document.getElementById("login-btn").style.display = "none";
+            document.getElementById("logout-btn").style.display =
+              "inline-block";
+          }
+        });
+
+      viewport.addEventListener("scroll", render);
+      window.addEventListener("resize", updateGridDimensions);
+      updateGridDimensions();
+    </script>
+  </body>
+</html>
